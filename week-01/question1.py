@@ -51,3 +51,116 @@ ciphertexts = ["315c4eeaa8b5f8aaf9174145bf43e1784b8fa00dc71d885a804e5ee9fa40b163
                "466d06ece998b7a2fb1d464fed2ced7641ddaa3cc31c9941cf110abbf409ed39598005b3399ccfafb61d0315fca0a314be138a9f32503bedac8067f03adbf3575c3b8edc9ba7f537530541ab0f9f3cd04ff50d66f1d559ba520e89a2cb2a83" ]
 
 target_ciphertext = "32510ba9babebbbefd001547a810e67149caee11d945cd7fc81a05e9f85aac650e9052ba6a8cd8257bf14d13e6f0a803b54fde9e77472dbff89d71b57bddef121336cb85ccb8f3315f4b52e301d16e9f52f904"
+
+#it's going to be easier to deal with things in ascii
+ciphertexts = [s.decode("hex") for s in ciphertexts]
+target_ciphertext = target_ciphertext.decode("hex")
+best_guess_key = [0] * max(map(len,ciphertexts))
+test_key = [0] * len(best_guess_key)
+spaces = [' '] * 200
+cleartexts = [''] * len(ciphertexts)
+
+def strxor(a, b):     # xor two strings of different lengths RETURNS ASCII
+    if len(a) > len(b):
+        return "".join([chr(ord(x) ^ ord(y)) for (x, y) in zip(a[:len(b)], b)])
+    else:
+        return "".join([chr(ord(x) ^ ord(y)) for (x, y) in zip(a, b[:len(a)])])
+
+def decrypt(k, ct):
+    msg = list(strxor(k, ct))
+    for index, mchr in enumerate(msg):
+        if ord(k[index]) == 0 and not (mchr.isalpha() or mchr == ' '):
+            msg[index] = '*'
+
+    return "".join(msg)
+
+def decrypt_all(key, cts):
+    clears = [' '] * len(cts)
+    
+    for index, ct in enumerate(ciphertexts):
+        clears[index] = decrypt(key, ct)
+
+    return clears
+
+## command line stuff
+def guess(msg_num, chr_num, g):
+    global cleartexts
+    test_key[chr_num] = ord(g) ^ ord(ciphertexts[msg_num][chr_num])
+    cleartexts = decrypt_all("".join(map(chr, test_key)), ciphertexts)
+    print cleartexts[msg_num]
+
+def revert():
+    global test_key
+    global best_guess_key
+    global cleartexts
+    test_key = best_guess_key[:]
+    cleartexts = decrypt_all("".join(map(chr, test_key)), ciphertexts)
+
+def commit():
+    global test_key
+    global best_guess_key
+    global cleartexts
+    best_guess_key = test_key[:]
+    cleartexts = decrypt_all("".join(map(chr, test_key)), ciphertexts)
+
+def print_all():
+    for index, msg in enumerate(cleartexts):
+        print "Msg %d:" % index
+        print msg
+
+def print_target():
+    keystr = "".join(map(chr, best_guess_key))
+    print decrypt(keystr, target_ciphertext)
+    
+
+if __name__ == "__main__":
+    
+
+    for ct1_num, ct1 in enumerate(ciphertexts[:-1]):
+        for ct2_num, ct2 in enumerate(ciphertexts[ct1_num + 1:]):
+    
+            xor_msgs = strxor(ct1, ct2)
+            xor_spaces = strxor(xor_msgs, spaces)
+
+            for index, test_chr in enumerate(xor_spaces):
+                if test_chr.isalpha():
+                    key_guess1 = ord(' ') ^ ord(ct1[index])
+                    key_guess2 = ord(' ') ^ ord(ct2[index])
+                    best_guess = ''
+
+                    if key_guess1 == ord(test_chr) ^ ord(ct2[index]):
+                        #correct guess!  fill in stuff
+                        best_guess = key_guess1
+                    elif key_guess2 == ord(test_chr) ^ ord(ct1[index]):
+                        #oops, it was the other way.  oh well.  yay!
+                        best_guess = key_guess2
+
+                    alpha_cntr = 0
+                    shorter_strs = 0
+
+                    for ct in ciphertexts:
+                        try:
+                            c = chr(ord(ct[index]) ^ best_guess)
+                            if c.isalpha() or c == ' ':
+                                alpha_cntr += 1
+                        except IndexError:
+                            shorter_strs += 1
+                            continue
+
+                    #if the key resulted in a alphanumeric or a space in
+                    #over half the places tried, consider it a success
+                    if alpha_cntr > (len(ciphertexts) - shorter_strs) / 2:
+                        #print "key at %d is %d" % (index, best_guess)
+                        best_guess_key[index] = best_guess
+
+    print "\nDid the best I could.  Figure the rest out"
+    keystr = "".join(map(chr, best_guess_key))
+    cleartexts = decrypt_all(keystr, ciphertexts)
+
+    test_key = best_guess_key[:]
+    
+    print "done"
+
+
+### this is as far as I got.  key:
+#[102, 57, 110, 137, 201, 219, 216, 204, 152, 116, 53, 42, 205, 99, 149, 16, 46, 175, 206, 120, 170, 127, 237, 40, 160, 127, 107, 201, 141, 41, 197, 11, 105, 176, 51, 154, 25, 248, 170, 64, 26, 156, 109, 112, 143, 128, 192, 102, 199, 99, 254, 240, 18, 49, 72, 205, 216, 232, 2, 208, 91, 169, 135, 119, 51, 93, 174, 252, 236, 213, 156, 67, 58, 107, 38, 139, 96, 191, 78, 240, 60, 154, 97, 16, 152, 187, 62, 154, 49, 97, 237, 199, 184, 4, 163, 53, 34, 207, 210, 2, 210, 198, 140, 87, 55, 110, 219, 168, 194, 202, 80, 2, 124, 97, 36, 108, 226, 161, 43, 12, 69, 2, 23, 80, 16, 192, 161, 186, 70, 37, 120, 109, 145, 17, 0, 121, 125, 138, 71, 233, 139, 2, 4, 196, 239, 0, 0, 0, 169, 0, 0, 0, 0, 0, 138, 168, 130, 209, 0, 0, 50, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
